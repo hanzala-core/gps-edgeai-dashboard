@@ -1,0 +1,527 @@
+GPS-EdgeAI Software Development Plan
+Draft v0.4 · 18 November 2026 · GPS-EdgeAI semester dashboard
+
+1. Goal and current position
+Build a local web dashboard that lets a student or demonstrator run a simulated GPS receiver session,
+inspect its readings and status, and reopen saved session data. The semester demo must show a working
+flow from browser to backend to database and back. The receiver research project provides the longer-term
+requirements for recorded and live data.
+The GitHub repository and local checkout currently have main with the README and Git setup files. No
+open GitHub issues or additional remote branches were visible when reviewed. The submitted SRS is
+Version 1.0, Draft 1, dated 20 October 2026. This plan selects a semester subset and ties it to the SRS
+requirement IDs.
+Delivery stage
+
+Data source
+
+Completion evidence
+
+First working slice
+
+One generated GPS demo
+reading
+
+Save from the browser, restart the server, and
+see the same saved reading in history
+
+Semester prototype
+
+Repeatable simulated GPS
+sessions
+
+Start, observe, stop, and reopen a session with
+readings, status, and at least one alert scenario
+
+Recorded receiver integration
+
+A documented recording and its
+processed outputs
+
+Replay a valid SoftGNSS output through the
+same dashboard, with the source identified as
+Recorded
+
+Full receiver integration
+
+Live GPS L1 C/A I/Q from the
+selected FPGA/SDR
+
+Measure acquisition, tracking, PVT,
+classification, display, and logging against the
+receiver SRS under documented test conditions
+
+2. Semester requirements and acceptance checks
+An acceptance check describes what someone can observe to verify each requirement. The D identifiers
+below belong to this plan. The FR, NFR, and SEC identifiers belong to the original SRS.
+ID
+
+Requirement
+
+Acceptance check
+
+SRS relationship
+
+D-01
+
+Show a clear Simulation Mode
+label and the receiver session
+state.
+
+Open the dashboard and identify both the source
+and state from text.
+
+§4.1, NFR-12
+
+D-02
+
+Start and stop a simulated session
+and record its times.
+
+Start creates a session. Stop records its end time
+and stops adding readings. Starting while a
+session is running returns a clear message.
+
+FR-22
+
+D-03
+
+Generate repeatable simulated
+readings and display satellite
+measurements and quality classes.
+
+Run a known scenario and compare the
+displayed tracked count and per-satellite labels
+with its sample data.
+
+FR-08, FR-17,
+FR-20, simulated
+inputs and classes
+
+D-04
+
+Display PVT availability and
+available position, velocity, and
+time values.
+
+A valid scenario shows its values. Unavailable
+and stale scenarios show the matching text label.
+
+FR-13, FR-14,
+FR-20, SEC-01
+
+1
+
+ID
+
+Requirement
+
+Acceptance check
+
+SRS relationship
+
+D-05
+
+Persist readings, sessions, and
+relevant events in SQLite.
+
+Save a reading, restart the app, reopen the
+session, and find the same record and values.
+
+§7.2, FR-18 and
+FR-22 where
+applicable, plus
+the semester
+database
+requirement
+
+D-06
+
+Present a basic chart and a visible
+alert for a simulated anomaly.
+
+Run the anomaly scenario, find the affected
+satellite and time, and see the event in session
+history.
+
+FR-17, FR-20,
+simulated
+anomaly
+
+D-07
+
+Supply a repeatable local demo
+and record results.
+
+A teammate follows the run instructions on their
+machine and completes the demo checklist.
+
+§2.6, NFR-14,
+NFR-15
+
+For the first slice, use a single Save Demo Reading button with one generated reading. The Start/Stop
+flow and repeatable scenarios follow once persistence works. At the first milestone review, record who
+owns each requirement and add any instructor requirement with its own acceptance check.
+
+3. Proposed design
+Use Next.js (App Router, React, and TypeScript) with SQLite for processed records. One Next.js application
+supplies the page rendering, browser interactions, and all server-side data access; there is no separate
+Python service, API route layer, or client-side fetch code. SQLite remains the storage engine because D-05
+and §7.2 require documented persistence; the app reaches it from server code. Keep the interface plain and
+functional, using shadcn/ui primitives where they help and avoiding decorative styling. The submitted SRS
+describes a host dashboard and allows CSV or JSON session files. Section 7.2 requires a documented schema
+and retention policy when a database is added.
+Recorded receiver
+output
+
+Simulation source
+
+Live FPGA I/Q
+
+Host receiver
+and classifier
+
+Reading format
+
+Next.js server
+
+SQLite
+
+Next.js dashboard
+
+Figure 1. Data flow from simulation, recorded output, and live FPGA input.
+
+The simulator and later receiver adapters supply the same types of processed readings. The dashboard and
+database teammates can begin with a shared example response while the server routes are being built. The
+dashboard can request the latest processed reading on a regular interval after Start and fetch stored
+records for history from the server. The full receiver's measured refresh targets belong to
+SRS Chapter 5 and require testing on the selected hardware.
+
+2
+
+Reading fields to agree before coding
+Field or group
+
+Meaning
+
+session_id, observed_at,
+source
+
+Session identity, observation time, and simulation, recorded, or live
+source. Document time conventions and preserve GPS time separately when
+available.
+
+receiver_state
+
+stopped, initializing, running, or error.
+
+pvt
+
+Status of valid, unavailable, or stale. Include available position, velocity,
+and GPS time with documented units. Use null for missing numeric values.
+
+satellites
+
+Per-satellite entries with PRN, tracking status, available C/N₀ in dB-Hz, Doppler
+in Hz, and a quality class or unavailable state. Derive displayed counts from the
+corresponding entries.
+
+events
+
+A time and message for session changes, errors, and simulated anomaly events.
+
+Keep AI classification per satellite. A session-wide count summarizes those classes. Display PVT status
+and AI quality as separate fields. The first sample can contain one tracked satellite and an unavailable PVT
+value, so every team member can implement and verify the same case.
+
+Storage and server functions
+Start with sessions and readings linked by session ID. Document the schema with column names,
+types, units, keys, and how long demo records are retained. For the first iteration, keep the satellite array
+with its reading. Add a separate satellite table later if per-satellite queries require it. Store events separately
+when session and alert logging is added. Keep the local database file out of version control and keep
+schema initialization in the application setup.
+
+All data access runs on the Next.js server. Server Components read SQLite directly when rendering the
+dashboard. Mutations are Server Actions in files marked with the "use server" directive; buttons and forms
+call them directly. Do not add route handlers, API folders, or client-side fetch calls.
+Proposed server function
+
+Purpose
+
+saveDemoReading()
+
+Generate and save one sample in the first demo slice and return its reading ID
+and session ID.
+
+getSessionReadings(sessionId)
+
+Read saved rows for a session and display recent history.
+
+startSession() and stopSession(sessionId)
+
+Start and stop the full simulated session flow.
+
+getSessions()
+
+List saved sessions for reopening history after restart, starting in the first slice.
+
+The first save action can create a demo session on demand. Later, session controls supply the active
+session ID. Agree on the returned values and error messages before dashboard integration. Everything runs
+on the same local Next.js server, so the whole build starts with one command (pnpm dev).
+
+3
+
+4. Work sequence and proposed owners
+Milestone
+
+Work
+
+Review evidence
+
+M0 · Requirements and
+design
+
+Agree on D-01-D-07, one example reading, a
+dashboard sketch, server function contracts, schema draft,
+and an owner for each task.
+
+The frontend, backend, and database
+owners can each explain what data
+they send or receive.
+
+M0a · Beginner
+preparation
+
+Learn the foundations for each role and complete
+the small exercises below.
+
+Each teammate can show and explain
+their own exercise before starting the
+dashboard implementation.
+
+M1 · First working slice
+
+Run the Next.js dev server with pnpm dev, create the demo reading, save it
+through SQLite, and read it into the dashboard.
+
+One save and one successful read after
+a server restart.
+
+M2 · Session demo
+
+Wire Start/Stop, source labels, status cards, and a
+satellite table to simulated sessions.
+
+Run one complete session and reopen
+it from history.
+
+M3 · Testing and
+presentation
+
+Add chart and anomaly scenario, test missing and
+stale PVT, fix reproducible issues, and write the
+run and demo instructions.
+
+A teammate can run the demo from the
+repo and show each acceptance check.
+
+M4 · Recorded-data
+bridge
+
+Check the capture settings, run the recorded file
+through SoftGNSS, and export a valid output to
+the shared reading format.
+
+A traceable recorded sample appears
+on the dashboard with the Recorded
+source label.
+
+Preparation before implementation
+The team is starting with limited background in the chosen languages. Begin with one short exercise per
+role. Use the early sections of the resources, then type and run the exercise yourself. Share what it does in
+your own words at the team review.
+Role
+
+Study in this order
+
+First practice result
+
+Hanzala · Backend
+
+JavaScript and TypeScript basics, then React
+components and Server Actions. Start the
+Next.js Learn course once you can run a small
+Node.js script. Next.js Learn (nextjs.org/learn)
+
+Print a sample satellite count and
+status, then return those values from
+a JSON object and explain the keys.
+
+Fariha · Dashboard
+
+React components and JSX, then page structure in
+the Next.js App Router. Learn a client-side button
+event after the page renders. Next.js Learn React
+Foundations
+
+Open a simple page with a title, a
+sample reading, and a button. Style it,
+then make the button change the
+displayed status.
+
+Hibab · Database
+
+Tables, rows, and columns, then read a row with
+SELECT and add a row with INSERT. Move to the
+better-sqlite3 package inside Next.js server code
+after the SQL exercise. CS50 SQL, Querying
+
+Use a small SQLite test table to store
+one sample reading and retrieve it after
+reopening the database.
+
+Umam · Testing
+
+Learn to write steps, an expected result, and an
+actual result. Watch the issue creation section for
+reporting. GitHub Issues for Beginners
+
+Write a test case for the first save and
+restart demo, with a pass condition the
+team can check.
+
+4
+
+Proposed ownership during implementation
+Proposed owner
+
+First task
+
+Handoff
+
+Hanzala
+
+Create demo-session from main, check
+Node.js and pnpm, and type the first Server Action
+with a SQLite read. Then implement the demo save and
+history actions.
+
+Share the example response and how
+to run the local server.
+
+Fariha
+
+Sketch the dashboard page and build the Simulation
+Mode label, Save Demo Reading button, and
+history display using the shared example.
+
+Share the page and the fields it expects
+from the Server Actions.
+
+Hibab
+
+Draft sessions and readings and implement
+one insert and read in SQLite.
+
+Give the backend owner the server-side
+save/read functions and the database
+initialization steps.
+
+Umam
+
+Write the save/restart/read checklist and test the
+first integrated demo.
+
+Report issues with steps, expected
+result, actual result, and the branch or
+commit used.
+
+Each GitHub issue should carry the matching D ID and a check that shows when the work is complete.
+Keep changes focused on the owner's area, review them together on the dashboard branch, and record any
+change in scope in the plan. Set calendar dates once the team confirms the demo deadline and availability.
+
+5. How to verify the demo
+1. Start the local Next.js app with pnpm dev and confirm the dashboard loads.
+2. Open the dashboard and check that Simulation Mode is visible. Save a demo reading and confirm its
+
+values appear in history.
+3. Restart the app and reopen the session. Check that the same saved ID, observation time, and values are
+
+present.
+4. Start and stop a simulated session. Check its state and times, and confirm the reading count stays
+
+steady after Stop.
+5. Run a scenario with an unavailable or stale fix and another with an anomalous satellite. Check labels,
+
+counts, and saved events.
+6. Ask a teammate to run the same demo from the documented setup and record the result against each
+
+requirement ID.
+The first slice is done after check 3. The semester release is ready after checks 1-6. Record a short
+demonstration after the team passes the checklist.
+
+5
+
+6. Receiver integration after the semester slice
+The original SRS describes GPS L1 C/A reception, FPGA I/Q streaming, acquisition and tracking,
+navigation decoding and PVT, and per-channel quality classification. Treat each as a module with a
+defined input and output. The relevant sequence is FR-01-FR-03 for sample reception, FR-04-FR-09 for
+acquisition/tracking, FR-10-FR-14 for navigation/PVT, FR-15-FR-19 for classification, and FR-20-FR-22
+for the dashboard, evaluation, and sessions.
+1. Recorded data. The local SoftGNSS settings point to Static_5mins.bin. Check the recording
+
+metadata and produce a verified output, then map available navigation and tracking fields into the
+common reading format. Mark missing fields unavailable and document their units and time source.
+2. Live source. Agree on the FPGA transport, sample packing and rate, channel order, start/stop
+
+behavior, and buffer status before writing the adapter. Keep raw capture files with their capture
+configuration and store processed summaries by session.
+3. Edge AI and evaluation. Agree on the eight SRS tracking features, labelled examples, validation data,
+
+and evaluation metrics. Show genuine classification outputs with the applicable source and validity.
+Measure receiver and model performance before reporting that an SRS target was met.
+
+7. Decisions for the first team review
+•
+
+Confirm the semester demo date and the proposed owners.
+
+•
+
+Agree on the first shared sample and the exact fields the first screen will show.
+
+•
+
+Agree on where demo databases live and when old demo sessions can be cleared.
+
+•
+
+Confirm who can provide and validate a recorded-data export for M4 and which hardware interface
+details remain open for live integration.
+
+•
+
+Confirm the single Next.js app layout (App Router pages, Server Actions, and the better-sqlite3 driver)
+and the Node.js version the team will use.
+
+Sources reviewed
+•
+
+H. SE Preparation chat, including the teacher's request for a working semester interface with a database
+and simulated data.
+
+•
+
+H. GitHub gps-edgeai discussion, including the private repo setup, first demo slice, proposed team
+split, and SoftGNSS data flow.
+
+•
+
+GPS-EdgeAI Software Requirements Specification v1.0, Draft 1, especially Chapters 3-5 and §7.2.
+
+•
+
+GPS-EdgeAI dashboard repository
+
+6
+
+
